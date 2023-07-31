@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const tf = require("@tensorflow/tfjs-node");
@@ -7,7 +8,7 @@ const {
   scanLimitter,
   multerMiddleware,
 } = require("./utils");
-const {onRequest} = require("firebase-functions/v1/https");
+// const {onRequest} = require("firebase-functions/v1/https");
 
 const server = express();
 const PORT = process.env.PORT || 8080;
@@ -44,22 +45,18 @@ server.post("/scan", scanLimitter, multerMiddleware.single("file"), async (req, 
         const model = await tf.loadLayersModel(URL);
 
         const tensor = tf.tidy(() => {
-          const decode = tf.node.decodeImage(buffer);
+          const decode = tf.node.decodeImage(buffer, 3);
           const resize = tf.image.resizeBilinear(decode, [224, 224]);
-          const normalize = tf.div(resize, 255);
+          const normalize = tf.div(resize.toFloat(), 255.0);
           const expand = tf.expandDims(normalize, 0);
+
           return expand;
         });
 
-        const classes = model.predict(tensor)[0];
-
-        // const classesNormalized = classes.mul(1000);
-        // const classesRounded = classesNormalized.round();
-        // const classesInLevel = classesRounded.div(100).ceil();
-        // const classesFlattened = classesInLevel.flatten();
-
+        const classes = model.predict(tensor);
+        const flatten = classes.flatten()
         const label = [true, false];
-        const tensorToArray = await classes.array();
+        const tensorToArray = await flatten.array();
         const predictedIndex = tensorToArray.reduce(
             (max, x, i, arr) => x > arr[max] ? i : max, 0,
         );
